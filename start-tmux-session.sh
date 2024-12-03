@@ -10,6 +10,8 @@ else
 
     tmux send-keys -t 0 'nvim .' C-m
 
+    tmux new-window -d
+
     tmux attach-session -t $SESSION_NAME
 fi
 
