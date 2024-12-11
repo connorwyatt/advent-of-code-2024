@@ -9,9 +9,10 @@ const TARGET_STRING: &str = "XMAS";
 const INPUT: &str = include_str!("aoc-input/input.txt");
 
 fn main() {
-    println!("Result: {:?}", count_xmas_occurrences(INPUT));
+    println!("Result: {:?}", count_x_mas_occurrences(INPUT));
 }
 
+#[allow(dead_code)]
 fn count_xmas_occurrences(input: &str) -> usize {
     let mut grid = Grid::from_str(input).unwrap();
 
@@ -19,14 +20,35 @@ fn count_xmas_occurrences(input: &str) -> usize {
 
     for row in 0..grid.rows {
         for column in 0..grid.columns {
-            occurrences += count_occurrences(&mut grid, row, column);
+            occurrences +=
+                check_surrounding_characters_for_xmas_occurrences(&mut grid, row, column);
         }
     }
 
     occurrences
 }
 
-fn count_occurrences(grid: &mut Grid, row: usize, column: usize) -> usize {
+fn count_x_mas_occurrences(input: &str) -> usize {
+    let mut grid = Grid::from_str(input).unwrap();
+
+    let mut occurrences = 0;
+
+    for row in 1..grid.rows - 1 {
+        for column in 1..grid.columns - 1 {
+            if is_center_of_x_mas_occurrence(&mut grid, row, column) {
+                occurrences += 1;
+            }
+        }
+    }
+
+    occurrences
+}
+
+fn check_surrounding_characters_for_xmas_occurrences(
+    grid: &mut Grid,
+    row: usize,
+    column: usize,
+) -> usize {
     let searches = [
         vec![Direction::Up],
         vec![Direction::Up, Direction::Right],
@@ -73,6 +95,40 @@ fn count_occurrences(grid: &mut Grid, row: usize, column: usize) -> usize {
     count
 }
 
+fn is_center_of_x_mas_occurrence(grid: &mut Grid, row: usize, column: usize) -> bool {
+    grid.set_cursor(Cursor { x: column, y: row }).unwrap();
+
+    if grid.get() != 'A' {
+        return false;
+    };
+
+    grid.move_cursor(Direction::Up).unwrap();
+    grid.move_cursor(Direction::Left).unwrap();
+    let top_left = grid.get();
+    grid.move_cursor(Direction::Right).unwrap();
+    grid.move_cursor(Direction::Right).unwrap();
+    let top_right = grid.get();
+    grid.move_cursor(Direction::Down).unwrap();
+    grid.move_cursor(Direction::Down).unwrap();
+    let bottom_right = grid.get();
+    grid.move_cursor(Direction::Left).unwrap();
+    grid.move_cursor(Direction::Left).unwrap();
+    let bottom_left = grid.get();
+
+    let top_left_bottom_right_set = [top_left, bottom_right];
+    let top_right_bottom_left_set = [top_right, bottom_left];
+
+    if top_left_bottom_right_set.contains(&'M')
+        && top_left_bottom_right_set.contains(&'S')
+        && top_right_bottom_left_set.contains(&'M')
+        && top_right_bottom_left_set.contains(&'S')
+    {
+        return true;
+    };
+
+    false
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -82,5 +138,10 @@ mod test {
     #[test]
     fn count_xmas_occurrences_works() {
         assert_eq!(count_xmas_occurrences(EXAMPLE_INPUT), 18);
+    }
+
+    #[test]
+    fn count_x_mas_occurrences_works() {
+        assert_eq!(count_x_mas_occurrences(EXAMPLE_INPUT), 9);
     }
 }
