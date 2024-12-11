@@ -44,8 +44,6 @@ fn count_occurrences(grid: &mut Grid, row: usize, column: usize) -> usize {
         return 0;
     };
 
-    let should_log = row == 19 && column == 106;
-
     let count = searches
         .iter()
         .filter(|search_directions| {
