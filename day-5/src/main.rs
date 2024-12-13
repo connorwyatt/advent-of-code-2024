@@ -1,11 +1,11 @@
-use std::str::FromStr;
+use std::{cmp::Ordering, str::FromStr};
 
 const INPUT:&str = include_str!("aoc-input/input.txt");
 
 fn main() {
     println!(
         "Result: {:?}",
-        sum_of_middle_page_numbers_from_correctly_ordered_updates(INPUT)
+        sum_of_middle_page_numbers_from_incorrectly_ordered_updates(INPUT)
     );
 }
 
@@ -40,6 +40,7 @@ impl FromStr for UpdatePagesToProduce {
 
 type PagesToProduce = Vec<UpdatePagesToProduce>;
 
+#[allow(dead_code)]
 fn sum_of_middle_page_numbers_from_correctly_ordered_updates(input: &str) -> usize {
     let (page_ordering_rules, pages_to_produce) = parse_input(input);
 
@@ -47,6 +48,24 @@ fn sum_of_middle_page_numbers_from_correctly_ordered_updates(input: &str) -> usi
         .iter()
         .filter(|update_pages_to_produce| {
             is_update_pages_to_produce_valid(update_pages_to_produce, &page_ordering_rules)
+        })
+        .map(|update_pages_to_produce| {
+            let pages = &update_pages_to_produce.0;
+            pages[pages.len() / 2]
+        })
+        .sum()
+}
+
+fn sum_of_middle_page_numbers_from_incorrectly_ordered_updates(input: &str) -> usize {
+    let (page_ordering_rules, pages_to_produce) = parse_input(input);
+
+    pages_to_produce
+        .iter()
+        .filter(|update_pages_to_produce| {
+            !is_update_pages_to_produce_valid(update_pages_to_produce, &page_ordering_rules)
+        })
+        .map(|update_pages_to_produce| {
+            reorder_update_pages_to_produce(update_pages_to_produce, &page_ordering_rules)
         })
         .map(|update_pages_to_produce| {
             let pages = &update_pages_to_produce.0;
@@ -93,6 +112,29 @@ fn is_update_pages_to_produce_valid(
     true
 }
 
+fn reorder_update_pages_to_produce(
+    update_pages_to_produce: &UpdatePagesToProduce,
+    page_ordering_rules: &PageOrderingRules,
+) -> UpdatePagesToProduce {
+    let rules = page_ordering_rules.as_slice();
+
+    let mut result = update_pages_to_produce.0.clone().clone();
+
+    result.sort_unstable_by(|a, b| {
+        match rules.iter().find(|rule| (&rule.0 == a && &rule.1 == b) || (&rule.0 == b && &rule.1 == a)) {
+            Some(rule) => {
+                if &rule.0 == a {
+                    Ordering::Less
+                } else {
+                    Ordering::Greater
+                }
+            }
+            None => Ordering::Equal,
+        }
+    });
+    UpdatePagesToProduce(result)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -104,6 +146,14 @@ mod test {
         assert_eq!(
             sum_of_middle_page_numbers_from_correctly_ordered_updates(EXAMPLE_INPUT),
             143
+        );
+    }
+
+    #[test]
+    fn sum_of_middle_page_numbers_from_incorrectly_ordered_updates_works() {
+        assert_eq!(
+            sum_of_middle_page_numbers_from_incorrectly_ordered_updates(EXAMPLE_INPUT),
+            123
         );
     }
 
@@ -148,6 +198,35 @@ mod test {
                 UpdatePagesToProduce(vec![61, 13, 29]),
                 UpdatePagesToProduce(vec![97, 13, 75, 29, 47]),
             ]
+        );
+    }
+
+    #[test]
+    fn reorder_update_pages_to_produce_works() {
+        let (page_ordering_rules, _) = parse_input(EXAMPLE_INPUT);
+
+        assert_eq!(
+            reorder_update_pages_to_produce(
+                &UpdatePagesToProduce(vec![75, 97, 47, 61, 53]),
+                &page_ordering_rules
+            ),
+            UpdatePagesToProduce(vec![97, 75, 47, 61, 53])
+        );
+
+        assert_eq!(
+            reorder_update_pages_to_produce(
+                &UpdatePagesToProduce(vec![61, 13, 29]),
+                &page_ordering_rules
+            ),
+            UpdatePagesToProduce(vec![61, 29, 13])
+        );
+
+        assert_eq!(
+            reorder_update_pages_to_produce(
+                &UpdatePagesToProduce(vec![97, 13, 75, 29, 47]),
+                &page_ordering_rules
+            ),
+            UpdatePagesToProduce(vec![97, 75, 47, 29, 13])
         );
     }
 }
