@@ -1,9 +1,12 @@
-use std::{fs, str::FromStr};
+use std::str::FromStr;
 
 const INPUT:&str = include_str!("aoc-input/input.txt");
 
 fn main() {
-    println!("Result: {:?}", sum_of_middle_page_numbers_from_correctly_ordered_updates(INPUT));
+    println!(
+        "Result: {:?}",
+        sum_of_middle_page_numbers_from_correctly_ordered_updates(INPUT)
+    );
 }
 
 type PageOrderingRules = Vec<PageOrderingRule>;
@@ -38,9 +41,18 @@ impl FromStr for UpdatePagesToProduce {
 type PagesToProduce = Vec<UpdatePagesToProduce>;
 
 fn sum_of_middle_page_numbers_from_correctly_ordered_updates(input: &str) -> usize {
-    let (_, _) = parse_input(input);
+    let (page_ordering_rules, pages_to_produce) = parse_input(input);
 
-    0
+    pages_to_produce
+        .iter()
+        .filter(|update_pages_to_produce| {
+            is_update_pages_to_produce_valid(update_pages_to_produce, &page_ordering_rules)
+        })
+        .map(|update_pages_to_produce| {
+            let pages = &update_pages_to_produce.0;
+            pages[pages.len() / 2]
+        })
+        .sum()
 }
 
 fn parse_input(input: &str) -> (PageOrderingRules, PagesToProduce) {
@@ -62,11 +74,38 @@ fn parse_input(input: &str) -> (PageOrderingRules, PagesToProduce) {
     (page_ordering_rules, pages_to_produce)
 }
 
+fn is_update_pages_to_produce_valid(
+    update_pages_to_produce: &UpdatePagesToProduce,
+    page_ordering_rules: &PageOrderingRules,
+) -> bool {
+    let pages = update_pages_to_produce.0.clone();
+    for page in pages.as_slice() {
+        for later_page in pages.iter().skip_while(|&x| x != page) {
+            for rule in page_ordering_rules {
+                if &rule.0 == page && &rule.1 == later_page {
+                    break;
+                } else if &rule.0 == later_page && &rule.1 == page {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
 
     const EXAMPLE_INPUT: &str = include_str!("aoc-input/example-input.txt");
+
+    #[test]
+    fn sum_of_middle_page_numbers_from_correctly_ordered_updates_works() {
+        assert_eq!(
+            sum_of_middle_page_numbers_from_correctly_ordered_updates(EXAMPLE_INPUT),
+            143
+        );
+    }
 
     #[test]
     fn parse_input_works() {
