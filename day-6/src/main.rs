@@ -1,13 +1,19 @@
-use std::{collections::HashSet, str::FromStr};
+use std::{
+    collections::HashSet,
+    str::FromStr,
+    thread::{self, available_parallelism},
+};
 
-use lab_map::{LabMap, StepForwardError};
+use crossbeam_channel::{Receiver, Sender};
+use lab_map::{LabMap, Position, StepForwardError};
 
 const INPUT: &str = include_str!("aoc-input/input.txt");
 
 fn main() {
-    println!("Result: {:?}", distinct_guard_visit_positions(INPUT));
+    println!("Result: {:?}", add_obstruction_potential_positions(INPUT));
 }
 
+#[allow(dead_code)]
 fn distinct_guard_visit_positions(input: &str) -> usize {
     let mut lab_map = LabMap::from_str(input).unwrap();
 
@@ -31,6 +37,83 @@ fn distinct_guard_visit_positions(input: &str) -> usize {
     visited_positions.len()
 }
 
+fn add_obstruction_potential_positions(input: &str) -> usize {
+    let lab_map = LabMap::from_str(input).unwrap();
+
+    let num_threads = available_parallelism().unwrap().get();
+    let (sender, receiver): (Sender<Position>, Receiver<Position>) = crossbeam_channel::bounded(1);
+
+    let join_handles = (0..num_threads - 1)
+        .map(|_| {
+            let mut lab_map = lab_map.clone();
+            let receiver = receiver.clone();
+            thread::spawn(move || {
+                let mut potential_obstruction_positions_count: usize = 0;
+
+                while let Ok(position) = receiver.recv() {
+                    lab_map.reset();
+
+                    if lab_map.obstruction_positions().contains(&position)
+                        || lab_map.current_guard_position() == &position
+                    {
+                        continue;
+                    };
+
+                    lab_map.add_obstruction(&position);
+
+                    let mut visited_positions_and_directions = HashSet::new();
+
+                    loop {
+                        while lab_map.is_next_step_obstructed() {
+                            lab_map.turn_right();
+                        }
+
+                        let guard_position_and_direction = (
+                            lab_map.current_guard_position().clone(),
+                            lab_map.current_guard_direction().clone(),
+                        );
+
+                        if visited_positions_and_directions.contains(&guard_position_and_direction)
+                        {
+                            potential_obstruction_positions_count += 1;
+                            break;
+                        }
+
+                        match lab_map.step_forward() {
+                            Ok(_) => {}
+                            Err(StepForwardError::LeftMappedArea) => break,
+                            Err(StepForwardError::Obstruction) => {
+                                panic!("Obstructions should not be hit")
+                            }
+                        }
+
+                        visited_positions_and_directions.insert(guard_position_and_direction);
+                    }
+                }
+
+                potential_obstruction_positions_count
+            })
+        })
+        .collect::<Vec<_>>();
+
+    for y in 0..lab_map.height() {
+        for x in 0..lab_map.width() {
+            let position = Position::new(x, y);
+
+            sender.send(position).unwrap();
+        }
+    }
+
+    drop(sender);
+
+    let mut potential_obstruction_positions_count = 0;
+    for handle in join_handles {
+        potential_obstruction_positions_count += handle.join().unwrap();
+    }
+
+    potential_obstruction_positions_count
+}
+
 mod lab_map {
     use std::str::FromStr;
 
@@ -40,8 +123,14 @@ mod lab_map {
         y: usize,
     }
 
-    #[derive(Debug)]
-    enum Direction {
+    impl Position {
+        pub(crate) fn new(x: usize, y: usize) -> Self {
+            Self { x, y }
+        }
+    }
+
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+    pub(crate) enum Direction {
         Up,
         Right,
         Down,
@@ -59,12 +148,15 @@ mod lab_map {
         }
     }
 
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     pub(crate) struct LabMap {
         width: usize,
         height: usize,
+        initial_guard_position: Position,
         guard_position: Position,
+        initial_guard_direction: Direction,
         guard_direction: Direction,
+        initial_obstruction_positions: Vec<Position>,
         obstruction_positions: Vec<Position>,
     }
 
@@ -105,11 +197,18 @@ mod lab_map {
                 }
             }
 
+            let guard_position = guard_position.expect("Guard position not found.");
+
+            let guard_direction = Direction::Up;
+
             Ok(Self {
                 width: width.expect("Width should be set."),
                 height,
-                guard_position: guard_position.expect("Guard position not found."),
-                guard_direction: Direction::Up,
+                initial_guard_position: guard_position.clone(),
+                guard_position,
+                initial_guard_direction: guard_direction.clone(),
+                guard_direction,
+                initial_obstruction_positions: obstruction_positions.clone(),
                 obstruction_positions,
             })
         }
@@ -121,8 +220,24 @@ mod lab_map {
     }
 
     impl LabMap {
+        pub(crate) fn width(&self) -> usize {
+            self.width
+        }
+
+        pub(crate) fn height(&self) -> usize {
+            self.height
+        }
+
+        pub(crate) fn obstruction_positions(&self) -> &Vec<Position> {
+            &self.obstruction_positions
+        }
+
         pub(crate) fn current_guard_position(&self) -> &Position {
             &self.guard_position
+        }
+
+        pub(crate) fn current_guard_direction(&self) -> &Direction {
+            &self.guard_direction
         }
 
         pub(crate) fn is_next_step_obstructed(&self) -> bool {
@@ -134,12 +249,22 @@ mod lab_map {
         }
 
         pub(crate) fn turn_right(&mut self) {
-            self.guard_direction = self.guard_direction.turned_right()
+            self.guard_direction = self.guard_direction.turned_right();
         }
 
         pub(crate) fn step_forward(&mut self) -> Result<(), StepForwardError> {
             self.guard_position = self.next_step_position()?;
             Ok(())
+        }
+
+        pub(crate) fn add_obstruction(&mut self, position: &Position) {
+            self.obstruction_positions.push(position.clone());
+        }
+
+        pub(crate) fn reset(&mut self) {
+            self.guard_position = self.initial_guard_position.clone();
+            self.guard_direction = self.initial_guard_direction.clone();
+            self.obstruction_positions = self.initial_obstruction_positions.clone();
         }
 
         fn next_step_position(&self) -> Result<Position, StepForwardError> {
@@ -218,5 +343,10 @@ mod test {
     #[test]
     fn distinct_guard_visit_positions_works() {
         assert_eq!(distinct_guard_visit_positions(EXAMPLE_INPUT), 41);
+    }
+
+    #[test]
+    fn add_obstruction_potential_positions_works() {
+        assert_eq!(add_obstruction_potential_positions(EXAMPLE_INPUT), 6);
     }
 }
