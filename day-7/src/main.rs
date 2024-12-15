@@ -7,11 +7,14 @@ const INPUT: &str = include_str!("aoc-input/input.txt");
 fn main() {
     println!(
         "Result: {:?}",
-        possibly_true_calibration_results_total(INPUT)
+        possibly_true_calibration_results_with_concatenation_total(INPUT)
     );
 }
 
+#[allow(dead_code)]
 fn possibly_true_calibration_results_total(input: &str) -> usize {
+    let operators = vec![Operator::Addition, Operator::Multiplication];
+
     let mut operator_permutations_lookup: HashMap<usize, Vec<Vec<Operator>>> = HashMap::new();
 
     parse_input(input)
@@ -21,7 +24,10 @@ fn possibly_true_calibration_results_total(input: &str) -> usize {
 
             let operator_permutations = operator_permutations_lookup
                 .entry(num_operators_required)
-                .or_insert(generate_operator_permutations(num_operators_required));
+                .or_insert(generate_operator_permutations(
+                    num_operators_required,
+                    &operators,
+                ));
 
             for permutation in operator_permutations {
                 let mut permutation_iterator = permutation.iter();
@@ -33,6 +39,56 @@ fn possibly_true_calibration_results_total(input: &str) -> usize {
                     .reduce(|acc, p| match permutation_iterator.next().unwrap() {
                         Operator::Addition => acc + p,
                         Operator::Multiplication => acc * p,
+                        _ => panic!("Concatenation is not included in these permutations"),
+                    })
+                    .unwrap();
+
+                if &result == equation.expected_result() {
+                    return Some(result);
+                }
+            }
+
+            None
+        })
+        .sum()
+}
+
+fn possibly_true_calibration_results_with_concatenation_total(input: &str) -> usize {
+    let operators = vec![
+        Operator::Addition,
+        Operator::Multiplication,
+        Operator::Concatenation,
+    ];
+
+    let mut operator_permutations_lookup: HashMap<usize, Vec<Vec<Operator>>> = HashMap::new();
+
+    parse_input(input)
+        .iter()
+        .filter_map(|equation| {
+            let num_operators_required = equation.parts().len() - 1;
+
+            let operator_permutations = operator_permutations_lookup
+                .entry(num_operators_required)
+                .or_insert(generate_operator_permutations(
+                    num_operators_required,
+                    &operators,
+                ));
+
+            for permutation in operator_permutations {
+                let mut permutation_iterator = permutation.iter();
+
+                let result = equation
+                    .parts()
+                    .iter()
+                    .cloned()
+                    .reduce(|acc, p| match permutation_iterator.next().unwrap() {
+                        Operator::Addition => acc + p,
+                        Operator::Multiplication => acc * p,
+                        Operator::Concatenation => {
+                            let p_log_10 = p.ilog10();
+                            let acc_multiplier: usize = 10u32.pow(p_log_10 + 1).try_into().unwrap();
+                            acc * acc_multiplier + p
+                        }
                     })
                     .unwrap();
 
@@ -50,17 +106,13 @@ fn possibly_true_calibration_results_total(input: &str) -> usize {
 enum Operator {
     Addition,
     Multiplication,
+    Concatenation,
 }
 
-impl Operator {
-    fn all() -> [Operator; 2] {
-        [Self::Addition, Self::Multiplication]
-    }
-}
-
-fn generate_operator_permutations(num_operators_required: usize) -> Vec<Vec<Operator>> {
-    let operators = Operator::all();
-
+fn generate_operator_permutations(
+    num_operators_required: usize,
+    operators: &[Operator],
+) -> Vec<Vec<Operator>> {
     let num_operator_permutations = operators
         .len()
         .checked_pow(num_operators_required.try_into().unwrap())
@@ -127,19 +179,49 @@ mod test {
     }
 
     #[test]
+    fn possibly_true_calibration_results_with_concatenation_total_works() {
+        assert_eq!(
+            possibly_true_calibration_results_with_concatenation_total(EXAMPLE_INPUT),
+            11387
+        );
+    }
+
+    #[test]
     fn generate_operator_permutations_works() {
         assert_eq!(
-            generate_operator_permutations(1),
+            generate_operator_permutations(1, &[Operator::Addition, Operator::Multiplication]),
             vec![vec![Operator::Addition], vec![Operator::Multiplication]]
         );
 
         assert_eq!(
-            generate_operator_permutations(2),
+            generate_operator_permutations(2, &[Operator::Addition, Operator::Multiplication]),
             vec![
                 vec![Operator::Addition, Operator::Addition],
                 vec![Operator::Addition, Operator::Multiplication],
                 vec![Operator::Multiplication, Operator::Addition],
                 vec![Operator::Multiplication, Operator::Multiplication]
+            ]
+        );
+
+        assert_eq!(
+            generate_operator_permutations(
+                2,
+                &[
+                    Operator::Addition,
+                    Operator::Multiplication,
+                    Operator::Concatenation
+                ]
+            ),
+            vec![
+                vec![Operator::Addition, Operator::Addition],
+                vec![Operator::Addition, Operator::Multiplication],
+                vec![Operator::Addition, Operator::Concatenation],
+                vec![Operator::Multiplication, Operator::Addition],
+                vec![Operator::Multiplication, Operator::Multiplication],
+                vec![Operator::Multiplication, Operator::Concatenation],
+                vec![Operator::Concatenation, Operator::Addition],
+                vec![Operator::Concatenation, Operator::Multiplication],
+                vec![Operator::Concatenation, Operator::Concatenation],
             ]
         );
     }
