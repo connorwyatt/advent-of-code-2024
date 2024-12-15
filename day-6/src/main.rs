@@ -2,7 +2,6 @@ use std::{
     collections::HashSet,
     fs,
     str::FromStr,
-    sync::{Arc, Mutex},
     thread::{self, available_parallelism},
 };
 
@@ -46,7 +45,7 @@ fn add_obstruction_potential_positions(input: &str) -> usize {
     let (sender, receiver): (Sender<Position>, Receiver<Position>) = crossbeam_channel::bounded(1);
 
     let join_handles = (0..num_threads - 1)
-        .map(|t| {
+        .map(|_| {
             let mut lab_map = lab_map.clone();
             let receiver = receiver.clone();
             thread::spawn(move || {
