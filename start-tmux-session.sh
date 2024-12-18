@@ -8,7 +8,7 @@ if tmux has-session -t $SESSION_NAME 2>/dev/null; then
 else
     tmux new-session -d -s $SESSION_NAME
 
-    tmux send-keys -t 0 'nvim .' C-m
+    tmux send-keys -t 1 'nvim .' C-m
 
     tmux new-window -d
 
