@@ -1,45 +1,50 @@
+use std::collections::HashMap;
+
 const INPUT: &str = include_str!("aoc-input/input.txt");
 
 fn main() {
-    println!("Result: {:?}", stone_count_after_blinks(INPUT, 25));
+    println!("Result: {:?}", stone_count_after_blinks(INPUT, 75));
 }
 
 fn stone_count_after_blinks(input: &str, blinks: usize) -> usize {
     let mut stones = parse_input(input);
 
     for _ in 0..blinks {
-        stones = apply_rules(&stones);
+        for (&stone, &count) in stones.clone().iter().filter(|(_, &count)| count > 0) {
+            *stones.get_mut(&stone).unwrap() -= count;
+
+            let updated_stones = apply_rules(stone);
+
+            for updated_stone in updated_stones {
+                *stones.entry(updated_stone).or_default() += count;
+            }
+        }
     }
 
-    stones.len()
+    stones.values().sum()
 }
 
-fn parse_input(input: &str) -> Vec<usize> {
-    input
+fn parse_input(input: &str) -> HashMap<usize, usize> {
+    let mut result = HashMap::new();
+    let stones = input
         .split_whitespace()
-        .map(|stone_string| stone_string.parse::<usize>().unwrap())
-        .collect()
+        .map(|stone_string| stone_string.parse::<usize>().unwrap());
+    for stone in stones {
+        *result.entry(stone).or_default() += 1;
+    }
+    result
 }
 
-fn apply_rules(stones: &[usize]) -> Vec<usize> {
-    let mut result = Vec::new();
-
-    for stone in stones {
-        if *stone == 0 {
-            result.push(1);
-            continue;
-        }
-
-        if let Some((part_1, part_2)) = split_even_digit_count_number(stone) {
-            result.push(part_1);
-            result.push(part_2);
-            continue;
-        }
-
-        result.push(stone * 2024);
+fn apply_rules(stone: usize) -> Vec<usize> {
+    if stone == 0 {
+        return vec![1];
     }
 
-    result
+    if let Some((part_1, part_2)) = split_even_digit_count_number(&stone) {
+        return vec![part_1, part_2];
+    }
+
+    vec![stone * 2024]
 }
 
 fn split_even_digit_count_number(number: &usize) -> Option<(usize, usize)> {
@@ -71,41 +76,8 @@ mod test {
 
     #[test]
     fn apply_rules_works() {
-        assert_eq!(
-            apply_rules(&[0, 1, 10, 99, 999]),
-            vec![1, 2024, 1, 0, 9, 9, 2021976]
-        );
-
-        assert_eq!(apply_rules(&[125, 17]), vec![253000, 1, 7]);
-
-        assert_eq!(apply_rules(&[253000, 1, 7]), vec![253, 0, 2024, 14168]);
-
-        assert_eq!(
-            apply_rules(&[253, 0, 2024, 14168]),
-            vec![512072, 1, 20, 24, 28676032]
-        );
-
-        assert_eq!(
-            apply_rules(&[512072, 1, 20, 24, 28676032]),
-            vec![512, 72, 2024, 2, 0, 2, 4, 2867, 6032]
-        );
-
-        assert_eq!(
-            apply_rules(&[512, 72, 2024, 2, 0, 2, 4, 2867, 6032]),
-            vec![1036288, 7, 2, 20, 24, 4048, 1, 4048, 8096, 28, 67, 60, 32]
-        );
-
-        assert_eq!(
-            apply_rules(&[1036288, 7, 2, 20, 24, 4048, 1, 4048, 8096, 28, 67, 60, 32]),
-            vec![
-                2097446912, 14168, 4048, 2, 0, 2, 4, 40, 48, 2024, 40, 48, 80, 96, 2, 8, 6, 7, 6,
-                0, 3, 2
-            ]
-        );
-    }
-
-    #[test]
-    fn split_even_digit_count_number_works() {
-        assert_eq!(split_even_digit_count_number(&253000), Some((253, 0)));
+        assert_eq!(apply_rules(0), vec![1]);
+        assert_eq!(apply_rules(253010), vec![253, 10]);
+        assert_eq!(apply_rules(1036288), vec![2097446912]);
     }
 }
