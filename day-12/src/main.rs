@@ -6,12 +6,100 @@ use std::{
 const INPUT: &str = include_str!("aoc-input/input.txt");
 
 fn main() {
-    println!("Result: {:?}", fencing_total_price(INPUT));
+    println!(
+        "Result: {:?}",
+        fencing_total_price_with_bulk_discount(INPUT)
+    );
 }
 
+#[allow(dead_code)]
 fn fencing_total_price(input: &str) -> usize {
     let grid = GardenPlotsGrid::from_str(input).unwrap();
 
+    let regions = calculate_regions(&grid);
+
+    regions
+        .iter()
+        .map(|region| {
+            let mut perimeter = 0;
+
+            for position in region {
+                perimeter += Direction::all()
+                    .iter()
+                    .filter(|direction| {
+                        let Some(adjacent_position) = position.translate(direction) else {
+                            return true;
+                        };
+                        !region.contains(&adjacent_position)
+                    })
+                    .count();
+            }
+
+            perimeter * region.len()
+        })
+        .sum()
+}
+
+fn fencing_total_price_with_bulk_discount(input: &str) -> usize {
+    let grid = GardenPlotsGrid::from_str(input).unwrap();
+
+    let regions = calculate_regions(&grid);
+
+    regions
+        .iter()
+        .map(|region| {
+            let mut grouped_edges: HashMap<(Direction, usize), HashSet<usize>> = HashMap::new();
+
+            for position in region {
+                for direction in Direction::all() {
+                    let main_axis = match direction {
+                        Direction::Up | Direction::Down => position.y,
+                        Direction::Left | Direction::Right => position.x,
+                    };
+                    let secondary_axis = match direction {
+                        Direction::Up | Direction::Down => position.x,
+                        Direction::Left | Direction::Right => position.y,
+                    };
+                    let Some(adjacent_position) = position.translate(&direction) else {
+                        grouped_edges
+                            .entry((direction, main_axis))
+                            .or_default()
+                            .insert(secondary_axis);
+                        continue;
+                    };
+                    if region.contains(&adjacent_position) {
+                        continue;
+                    }
+                    grouped_edges
+                        .entry((direction, main_axis))
+                        .or_default()
+                        .insert(secondary_axis);
+                }
+            }
+
+            grouped_edges
+                .values()
+                .map(|positions| {
+                    let mut positions = positions.iter().cloned().collect::<Vec<_>>();
+
+                    positions.sort();
+
+                    positions
+                        .windows(2)
+                        .filter(|&x| {
+                            let a = x.first().unwrap();
+                            let b = x.last().unwrap();
+                            *b != *a + 1
+                        })
+                        .count()
+                        + 1
+                })
+                .sum::<usize>() * region.len()
+
+        })
+        .sum()}
+
+fn calculate_regions(grid: &GardenPlotsGrid) -> Vec<HashSet<Position>> {
     let mut plots_by_plant: HashMap<char, HashSet<Position>> = HashMap::new();
 
     for y in 0..*grid.height() {
@@ -59,25 +147,6 @@ fn fencing_total_price(input: &str) -> usize {
     }
 
     regions
-        .iter()
-        .map(|region| {
-            let mut perimeter = 0;
-
-            for position in region {
-                perimeter += Direction::all()
-                    .iter()
-                    .filter(|direction| {
-                        let Some(adjacent_position) = position.translate(direction) else {
-                            return true;
-                        };
-                        !region.contains(&adjacent_position)
-                    })
-                    .count();
-            }
-
-            perimeter * region.len()
-        })
-        .sum()
 }
 
 fn get_adjacent_regions<'a>(
@@ -97,7 +166,7 @@ fn get_adjacent_regions<'a>(
         .collect::<Vec<_>>()
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 enum Direction {
     Up,
     Right,
@@ -212,5 +281,14 @@ mod test {
     fn fencing_total_price_works() {
         assert_eq!(fencing_total_price(EXAMPLE_INPUT_1), 140);
         assert_eq!(fencing_total_price(EXAMPLE_INPUT_2), 1930);
+    }
+
+    #[test]
+    fn fencing_total_price_with_bulk_discount_works() {
+        assert_eq!(fencing_total_price_with_bulk_discount(EXAMPLE_INPUT_1), 80);
+        assert_eq!(
+            fencing_total_price_with_bulk_discount(EXAMPLE_INPUT_2),
+            1206
+        );
     }
 }
