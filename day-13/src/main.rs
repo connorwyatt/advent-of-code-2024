@@ -1,3 +1,5 @@
+use std::usize;
+
 use lazy_static::lazy_static;
 use regex::Regex;
 
@@ -6,59 +8,82 @@ const INPUT: &str = include_str!("aoc-input/input.txt");
 fn main() {
     println!(
         "Result: {:?}",
-        calculate_minimum_tokens_to_win_all_prizes(INPUT)
+        calculate_minimum_tokens_to_win_all_prizes_with_corrected_prize_positions(INPUT)
     );
 }
 
 const BUTTON_A_COST: usize = 3;
 const BUTTON_B_COST: usize = 1;
 
+#[allow(dead_code)]
 fn calculate_minimum_tokens_to_win_all_prizes(input: &str) -> usize {
     let machines = parse_input(input);
 
+    calculate_minimum_tokens(&machines)
+}
+
+fn calculate_minimum_tokens_to_win_all_prizes_with_corrected_prize_positions(input: &str) -> usize {
+    let machines = parse_input(input)
+        .iter()
+        .map(|machine| {
+            Machine::new(
+                machine.button_a.clone(),
+                machine.button_b.clone(),
+                Position::new(
+                    machine.prize.x + 10000000000000,
+                    machine.prize.y + 10000000000000,
+                ),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    calculate_minimum_tokens(&machines)
+}
+
+fn calculate_minimum_tokens(machines: &[Machine]) -> usize {
     machines
         .iter()
         .filter_map(|machine| {
-            let button_a = &machine.button_a;
-            let button_b = &machine.button_b;
-            let prize = &machine.prize;
+            let button_a_x = machine.button_a.x as f64;
+            let button_a_y = machine.button_a.y as f64;
+            let button_b_x = machine.button_b.x as f64;
+            let button_b_y = machine.button_b.y as f64;
+            let prize_x = machine.prize.x as f64;
+            let prize_y = machine.prize.y as f64;
 
-            let maximum_button_a_presses = (prize.x / button_a.x).min(prize.y / button_a.y);
+            // Eq 1: ax * na + bx * nb = px
+            // Eq 2: ay * na + by * nb = py
 
-            let mut minimum_tokens_required = None;
+            // Cramer's rule:
 
-            for button_a_presses in 0..=maximum_button_a_presses {
-                let position_after_button_a_presses = button_a.apply_n_times(button_a_presses);
-                let distance_remaining_x = prize.x - position_after_button_a_presses.x;
-                let distance_remaining_y = prize.y - position_after_button_a_presses.y;
+            // Matrix:
+            // ax bx
+            // ay by
 
-                if distance_remaining_x % button_b.x != 0 || distance_remaining_y % button_b.y != 0
-                {
-                    continue;
-                }
+            let determinant = button_a_x * button_b_y - button_b_x * button_a_y;
 
-                let button_b_presses_x = distance_remaining_x / button_b.x;
-                let button_b_presses_y = distance_remaining_y / button_b.y;
+            // A Matrix:
+            // px bx
+            // py by
 
-                if button_b_presses_x != button_b_presses_y {
-                    continue;
-                }
+            let determinant_a = prize_x * button_b_y - button_b_x * prize_y;
 
-                let button_b_presses = button_b_presses_x;
+            // B Matrix:
+            // ax px
+            // ay py
 
-                let tokens_required =
-                    button_a_presses * BUTTON_A_COST + button_b_presses * BUTTON_B_COST;
+            let determinant_b = button_a_x * prize_y - prize_x * button_a_y;
 
-                match minimum_tokens_required {
-                    None => minimum_tokens_required = Some(tokens_required),
-                    Some(mtr) if mtr > tokens_required => {
-                        minimum_tokens_required = Some(tokens_required)
-                    }
-                    _ => {}
-                };
+            let a = determinant_a / determinant;
+            let b = determinant_b / determinant;
+
+            if a < 0.0 || b < 0.0 || a.trunc() != a || b.trunc() != b {
+                return None;
             }
 
-            minimum_tokens_required
+            let result = a * BUTTON_A_COST as f64 + b * BUTTON_B_COST as f64;
+
+            Some(result as usize)
         })
         .sum()
 }
@@ -167,7 +192,7 @@ impl Machine {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct Button {
     x: usize,
     y: usize,
@@ -176,10 +201,6 @@ struct Button {
 impl Button {
     fn new(x: usize, y: usize) -> Self {
         Self { x, y }
-    }
-
-    fn apply_n_times(&self, presses: usize) -> Position {
-        Position::new(self.x * presses, self.y * presses)
     }
 }
 
