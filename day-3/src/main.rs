@@ -1,4 +1,4 @@
-use std::{fs, str::FromStr};
+use std::str::FromStr;
 
 use lazy_static::lazy_static;
 use regex::{Match, Regex};
@@ -90,7 +90,7 @@ impl FromStr for DoDont {
 #[allow(dead_code)]
 fn sum_of_multiplication_results(input: &str) -> usize {
     MULTIPLY_REGEX
-        .find_iter(&input)
+        .find_iter(input)
         .map(|m| Multiplication::from_str(m.as_str()).unwrap().result())
         .sum()
 }
