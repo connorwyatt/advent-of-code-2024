@@ -1,11 +1,15 @@
-use core::panic;
+use std::collections::{HashSet, VecDeque};
 
 const INPUT: &str = include_str!("aoc-input/input.txt");
 
 fn main() {
-    println!("Result: {:?}", sum_of_boxes_gps_coordinates(INPUT));
+    println!(
+        "Result: {:?}",
+        sum_of_boxes_gps_coordinates_scaled_up(INPUT)
+    );
 }
 
+#[allow(dead_code)]
 fn sum_of_boxes_gps_coordinates(input: &str) -> usize {
     let (mut warehouse, movements) = parse_input(input);
 
@@ -13,7 +17,34 @@ fn sum_of_boxes_gps_coordinates(input: &str) -> usize {
         warehouse.apply_robot_movement(movement);
     }
 
-    warehouse.boxes.iter().map(|b| 100 * b.y + b.x).sum()
+    warehouse
+        .boxes
+        .iter()
+        .map(|b| {
+            let box_position = b.first().unwrap();
+            100 * box_position.y + box_position.x
+        })
+        .sum()
+}
+
+fn sum_of_boxes_gps_coordinates_scaled_up(input: &str) -> usize {
+    let scaled_input = scale_up_input(input);
+    let (mut warehouse, movements) = parse_input(scaled_input.as_str());
+
+    for (i, movement) in movements.iter().enumerate() {
+        println!();
+        println!("Movement {}: {:?}", i, movement);
+        warehouse.apply_robot_movement(movement);
+    }
+
+    warehouse
+        .boxes
+        .iter()
+        .map(|b| {
+            let box_position = b.first().unwrap();
+            100 * box_position.y + box_position.x
+        })
+        .sum()
 }
 
 #[derive(Debug)]
@@ -28,74 +59,102 @@ enum Direction {
 struct Warehouse {
     robot: Coordinate,
     walls: Vec<Coordinate>,
-    boxes: Vec<Coordinate>,
+    boxes: Vec<Vec<Coordinate>>,
 }
 
 impl Warehouse {
     fn apply_robot_movement(&mut self, movement: &Direction) {
-        let mut position = self.robot.clone();
+        let mut positions_to_check = VecDeque::from([self.robot.translate(movement)]);
 
-        let mut boxes = Vec::new();
+        let mut boxes_to_move = HashSet::new();
 
-        loop {
-            let Some(new_position) = position.translate(movement) else {
-                break;
-            };
-            position = new_position;
-
-            if self.walls.iter().any(|w| w == &position) {
+        while let Some(position_to_check) = positions_to_check.pop_front() {
+            if self.wall_at(&position_to_check).is_some() {
                 return;
             }
-            if self.boxes.iter().any(|b| b == &position) {
-                boxes.push(position.clone());
-                continue;
+
+            if let Some(b) = self.box_at(&position_to_check) {
+                boxes_to_move.insert(b.clone());
+
+                match movement {
+                    Direction::Up | Direction::Down => {
+                        for position in b {
+                            let position_to_check = position.translate(movement);
+                            positions_to_check.push_back(position_to_check);
+                        }
+                    }
+                    Direction::Left | Direction::Right => {
+                        let mut position = position_to_check.clone();
+                        loop {
+                            if b.contains(&position) {
+                                position = position.translate(movement);
+                            } else {
+                                break;
+                            }
+                        }
+                        positions_to_check.push_back(position);
+                    }
+                }
             }
-            break;
         }
 
-        if boxes.is_empty() {
-            self.robot = position.clone();
-            return;
+        self.robot = self.robot.translate(movement);
+
+        for b in boxes_to_move {
+            for position in self.box_mut(&b).unwrap().iter_mut() {
+                *position = position.translate(movement);
+            }
         }
+    }
 
-        let first_box = self
-            .boxes
-            .iter_mut()
-            .find(|b| b == &boxes.first().unwrap())
-            .unwrap();
+    fn wall_at(&self, coordinate: &Coordinate) -> Option<&Coordinate> {
+        self.walls.iter().find(|&w| w == coordinate)
+    }
 
-        self.robot = first_box.clone();
-        *first_box = position.clone();
+    fn box_at(&self, coordinate: &Coordinate) -> Option<&Vec<Coordinate>> {
+        self.boxes.iter().find(|b| b.contains(coordinate))
+    }
+
+    fn box_mut(&mut self, r#box: &Vec<Coordinate>) -> Option<&mut Vec<Coordinate>> {
+        self.boxes.iter_mut().find(|b| b == &r#box)
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct Coordinate {
     x: usize,
     y: usize,
 }
 
 impl Coordinate {
-    fn translate(&self, direction: &Direction) -> Option<Coordinate> {
+    fn translate(&self, direction: &Direction) -> Coordinate {
         match direction {
-            Direction::Up => Some(Coordinate {
+            Direction::Up => Coordinate {
                 x: self.x,
-                y: self.y.checked_sub(1)?,
-            }),
-            Direction::Down => Some(Coordinate {
+                y: self.y.checked_sub(1).unwrap(),
+            },
+            Direction::Down => Coordinate {
                 x: self.x,
-                y: self.y.checked_add(1)?,
-            }),
-            Direction::Left => Some(Coordinate {
-                x: self.x.checked_sub(1)?,
+                y: self.y.checked_add(1).unwrap(),
+            },
+            Direction::Left => Coordinate {
+                x: self.x.checked_sub(1).unwrap(),
                 y: self.y,
-            }),
-            Direction::Right => Some(Coordinate {
-                x: self.x.checked_add(1)?,
+            },
+            Direction::Right => Coordinate {
+                x: self.x.checked_add(1).unwrap(),
                 y: self.y,
-            }),
+            },
         }
     }
+}
+
+fn scale_up_input(input: &str) -> String {
+    input
+        .replace("#", "##")
+        .replace("O", "[]")
+        .replace(".", "..")
+        .replace("@", "@.")
 }
 
 fn parse_input(input: &str) -> (Warehouse, Vec<Direction>) {
@@ -122,7 +181,10 @@ fn parse_input(input: &str) -> (Warehouse, Vec<Direction>) {
                     walls.push(Coordinate { x, y });
                 }
                 'O' => {
-                    boxes.push(Coordinate { x, y });
+                    boxes.push(vec![Coordinate { x, y }]);
+                }
+                '[' => {
+                    boxes.push(vec![Coordinate { x, y }, Coordinate { x: x + 1, y }]);
                 }
                 _ => {}
             }
@@ -165,12 +227,26 @@ fn debug_warehouse(warehouse: &Warehouse) {
     for y in 0..height {
         for x in 0..width {
             let position = Coordinate { x, y };
-            if warehouse.walls.iter().any(|w| w == &position) {
+            if warehouse.wall_at(&position).is_some() {
                 print!("#");
                 continue;
             }
-            if warehouse.boxes.iter().any(|b| b == &position) {
-                print!("O");
+            if let Some(b) = warehouse.box_at(&position) {
+                match b.as_slice() {
+                    [_only] => {
+                        print!("O");
+                    }
+                    [left, _right] => {
+                        if &position == left {
+                            print!("[");
+                        } else {
+                            print!("]");
+                        }
+                    }
+                    _ => {
+                        panic!("boxes must be 1 or 2 squares wide");
+                    }
+                }
                 continue;
             }
             if warehouse.robot == position {
@@ -194,5 +270,13 @@ mod test {
     fn sum_of_boxes_gps_coordinates_works() {
         assert_eq!(sum_of_boxes_gps_coordinates(EXAMPLE_INPUT_1), 10092);
         assert_eq!(sum_of_boxes_gps_coordinates(EXAMPLE_INPUT_2), 2028);
+    }
+
+    #[test]
+    fn sum_of_boxes_gps_coordinates_scaled_up_works() {
+        assert_eq!(
+            sum_of_boxes_gps_coordinates_scaled_up(EXAMPLE_INPUT_1),
+            9021
+        )
     }
 }
